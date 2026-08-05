@@ -1,3 +1,19 @@
+# pnpm settings. In pnpm 11 these live here rather than in .npmrc.
+
+# Supply-chain protection: refuse any package version published less than this
+# many minutes ago, so a compromised release has to survive a day of public
+# scrutiny before it can enter the lockfile.
+#
+# 1440 (24 hours) is pnpm 11's own default. It is declared explicitly for two
+# reasons: local installs then resolve under exactly the policy CI enforces, so
+# a lockfile that passes here cannot fail there; and the guarantee no longer
+# depends on an upstream default that could change.
+#
+# Lowering or removing this weakens the protection pnpm 11 turned on in response
+# to the Shai-Hulud npm compromises. Prefer excluding a single package via
+# minimumReleaseAgeExclude over reducing the threshold for everything.
+minimumReleaseAge: 1440
+
 allowBuilds:
   sharp: false
   unrs-resolver: false
