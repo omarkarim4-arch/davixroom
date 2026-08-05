@@ -8,6 +8,12 @@ export default defineConfig({
     // later stage will opt into jsdom per-file via an environment comment.
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    setupFiles: ['./vitest.setup.ts'],
+    // Integration tests boot a PGlite instance and run every migration in
+    // beforeAll. Several files doing that concurrently comfortably exceeds the
+    // 10s default, and a timeout there reads as a failure when it is only slow.
+    hookTimeout: 60_000,
+    testTimeout: 30_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

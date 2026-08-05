@@ -15,16 +15,20 @@ import type { SqlExecutor } from '@/core/ports/sql';
  * connected as one proves nothing. Tests therefore switch to `authenticated`
  * (the role Supabase gives signed-in users) before making any claim about
  * access, and only seed data as the superuser.
+ *
+ * Identity is supplied exactly as Supabase supplies it — by setting
+ * `request.jwt.claims` — so these tests drive the same resolution path as a
+ * real request rather than a test-only shortcut.
  */
 export type TestDatabase = {
   /** Executor for the current role. */
   readonly sql: SqlExecutor;
-  /** Runs queries as `authenticated`, acting as the given user. */
-  asUser(userId: string): Promise<void>;
+  /** Runs queries as `authenticated`, acting as the given auth subject. */
+  asUser(authUserId: string): Promise<void>;
   /** Returns to the superuser connection, bypassing RLS — seeding only. */
   asSuperuser(): Promise<void>;
-  /** Runs `fn` as the given user, restoring the previous role afterwards. */
-  withUser<T>(userId: string, fn: (sql: SqlExecutor) => Promise<T>): Promise<T>;
+  /** Runs `fn` as the given auth subject, restoring the previous role after. */
+  withUser<T>(authUserId: string, fn: (sql: SqlExecutor) => Promise<T>): Promise<T>;
   close(): Promise<void>;
 };
 
@@ -51,22 +55,35 @@ export const createTestDatabase = async (): Promise<TestDatabase> => {
     grant usage on schema public to anon, authenticated;
   `);
 
+  // A stand-in for the auth schema Supabase manages. Migration 0003 references
+  // auth.users, so the table must exist; only the id is needed here.
+  await db.exec(`
+    create schema if not exists auth;
+    create table auth.users (
+      id uuid primary key,
+      email text
+    );
+  `);
+
   for (const migration of await readMigrations()) {
     await db.exec(migration);
   }
 
   const executor = new PGliteExecutor(db);
 
-  const asUser = async (userId: string): Promise<void> => {
+  const asUser = async (authUserId: string): Promise<void> => {
     await db.exec('reset role');
-    // set_config rather than SET so the value can be parameterised safely.
-    await db.query('select set_config($1, $2, false)', ['app.user_id', userId]);
+    // Exactly the claim shape Supabase sets on an authenticated request.
+    await db.query('select set_config($1, $2, false)', [
+      'request.jwt.claims',
+      JSON.stringify({ sub: authUserId, role: 'authenticated' }),
+    ]);
     await db.exec('set role authenticated');
   };
 
   const asSuperuser = async (): Promise<void> => {
     await db.exec('reset role');
-    await db.query('select set_config($1, $2, false)', ['app.user_id', '']);
+    await db.query('select set_config($1, $2, false)', ['request.jwt.claims', '']);
   };
 
   return {

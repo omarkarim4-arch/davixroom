@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PostgresProjectRepository } from './postgres-project-repository';
 import { createTestDatabase, type TestDatabase } from '../testing/database';
-import { SEED, seedFixture } from '../testing/seed';
+import { AUTH, SEED, seedFixture } from '../testing/seed';
 import { authorize } from '@/core/auth/authorize';
 import { sessionScope } from '@/core/auth/grant';
 import { asId } from '@/core/ids';
@@ -49,7 +49,7 @@ describe('PostgresProjectRepository', () => {
   });
 
   it('maps a project row to the domain type', async () => {
-    const project = await db.withUser(SEED.acmeApprover, (sql) =>
+    const project = await db.withUser(AUTH.acmeApprover, (sql) =>
       new PostgresProjectRepository(sql).findById(acmeProject),
     );
 
@@ -66,7 +66,7 @@ describe('PostgresProjectRepository', () => {
   it('returns null for a project outside the caller’s tenancy', async () => {
     // RLS filters the row out, so the repository never sees it — the tenancy
     // boundary is enforced below the application, not by this code.
-    const project = await db.withUser(SEED.acmeApprover, (sql) =>
+    const project = await db.withUser(AUTH.acmeApprover, (sql) =>
       new PostgresProjectRepository(sql).findById(globexProject),
     );
 
@@ -74,7 +74,7 @@ describe('PostgresProjectRepository', () => {
   });
 
   it('maps a membership row, preserving role and null removal', async () => {
-    const membership = await db.withUser(SEED.acmeApprover, (sql) =>
+    const membership = await db.withUser(AUTH.acmeApprover, (sql) =>
       new PostgresProjectRepository(sql).findMembership(acmeProject, acmeApprover),
     );
 
@@ -84,7 +84,7 @@ describe('PostgresProjectRepository', () => {
   });
 
   it('returns null when the user has no membership', async () => {
-    const membership = await db.withUser(SEED.acmeApprover, (sql) =>
+    const membership = await db.withUser(AUTH.acmeApprover, (sql) =>
       new PostgresProjectRepository(sql).findMembership(
         acmeProject,
         asId<'UserId'>(SEED.strangerUser),
@@ -95,7 +95,7 @@ describe('PostgresProjectRepository', () => {
   });
 
   it('maps a session-scoped grant back to its domain shape', async () => {
-    const grants = await db.withUser(SEED.acmeApprover, (sql) =>
+    const grants = await db.withUser(AUTH.acmeApprover, (sql) =>
       new PostgresProjectRepository(sql).listGrants(acmeProject, acmeApprover),
     );
 
@@ -109,7 +109,7 @@ describe('PostgresProjectRepository', () => {
   it('feeds authorize() end to end from stored rows', async () => {
     // The full Stage 1 + Stage 2 path: real rows, real mapping, real rule.
     const { project, membership, grants } = await db.withUser(
-      SEED.acmeApprover,
+      AUTH.acmeApprover,
       async (sql) => {
         const repo = new PostgresProjectRepository(sql);
         return {
@@ -164,7 +164,7 @@ describe('PostgresProjectRepository', () => {
     ]);
 
     const { project, membership, grants } = await db.withUser(
-      SEED.acmeApprover,
+      AUTH.acmeApprover,
       async (sql) => {
         const repo = new PostgresProjectRepository(sql);
         return {
@@ -191,7 +191,7 @@ describe('PostgresProjectRepository', () => {
   });
 
   it('lists grants for the vendor developer separately', async () => {
-    const grants = await db.withUser(SEED.developer, (sql) =>
+    const grants = await db.withUser(AUTH.developer, (sql) =>
       new PostgresProjectRepository(sql).listGrants(acmeProject, developer),
     );
 

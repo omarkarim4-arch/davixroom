@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createTestDatabase, type TestDatabase } from '../testing/database';
-import { SEED, seedFixture } from '../testing/seed';
+import { AUTH, SEED, seedFixture } from '../testing/seed';
 import { T0 } from '@/core/testing/doubles';
 
 /**
@@ -47,7 +47,7 @@ describe('row level security', () => {
   });
 
   it('shows a member only the projects they belong to', async () => {
-    const acme = await db.withUser(SEED.acmeApprover, (sql) =>
+    const acme = await db.withUser(AUTH.acmeApprover, (sql) =>
       sql.query<{ id: string }>('select id from projects'),
     );
 
@@ -57,7 +57,7 @@ describe('row level security', () => {
   it('returns zero rows for another tenant’s project, queried directly', async () => {
     // The heart of Stage 2: a Globex user asking for the Acme project by id
     // gets nothing back, with no application code involved.
-    const rows = await db.withUser(SEED.globexApprover, (sql) =>
+    const rows = await db.withUser(AUTH.globexApprover, (sql) =>
       sql.query('select id from projects where id = $1', [SEED.acmeProject]),
     );
 
@@ -65,7 +65,7 @@ describe('row level security', () => {
   });
 
   it('hides another tenant’s timeline events', async () => {
-    const rows = await db.withUser(SEED.globexApprover, (sql) =>
+    const rows = await db.withUser(AUTH.globexApprover, (sql) =>
       sql.query('select id from timeline_events where project_id = $1', [
         SEED.acmeProject,
       ]),
@@ -88,7 +88,7 @@ describe('row level security', () => {
   });
 
   it('lets a member of the same project read that content', async () => {
-    const rows = await db.withUser(SEED.acmeApprover, (sql) =>
+    const rows = await db.withUser(AUTH.acmeApprover, (sql) =>
       sql.query<{ id: string }>('select id from timeline_events'),
     );
 
@@ -96,7 +96,7 @@ describe('row level security', () => {
   });
 
   it('shows the vendor developer both projects they work on', async () => {
-    const rows = await db.withUser(SEED.developer, (sql) =>
+    const rows = await db.withUser(AUTH.developer, (sql) =>
       sql.query<{ id: string }>('select id from projects order by id'),
     );
 
@@ -106,10 +106,10 @@ describe('row level security', () => {
   it('isolates two clients that share a vendor', async () => {
     // Acme and Globex are both served by the same vendor org. Isolation must
     // key on project membership, not on the organization tree.
-    const acmeView = await db.withUser(SEED.acmeApprover, (sql) =>
+    const acmeView = await db.withUser(AUTH.acmeApprover, (sql) =>
       sql.query<{ id: string }>('select id from projects'),
     );
-    const globexView = await db.withUser(SEED.globexApprover, (sql) =>
+    const globexView = await db.withUser(AUTH.globexApprover, (sql) =>
       sql.query<{ id: string }>('select id from projects'),
     );
 
@@ -117,8 +117,8 @@ describe('row level security', () => {
     expect(globexView.map((row) => row.id)).toEqual([SEED.globexProject]);
   });
 
-  it('grants nothing to a user with no identity set', async () => {
-    await db.sql.query('select set_config($1, $2, false)', ['app.user_id', '']);
+  it('grants nothing to a request carrying no identity', async () => {
+    await db.sql.query('select set_config($1, $2, false)', ['request.jwt.claims', '']);
     await db.sql.query('set role authenticated');
     const rows = await db.sql.query('select id from projects');
     await db.asSuperuser();
@@ -126,12 +126,46 @@ describe('row level security', () => {
     expect(rows).toEqual([]);
   });
 
+  it('grants nothing to an auth subject with no domain user', async () => {
+    // A valid login that has not been linked to a person resolves to no user,
+    // and therefore to no memberships.
+    const rows = await db.withUser(AUTH.unlinked, (sql) =>
+      sql.query('select id from projects'),
+    );
+
+    expect(rows).toEqual([]);
+  });
+
+  it('ignores a forged app.user_id session setting', async () => {
+    // Migration 0003 removed this override. If it ever returns, this fails —
+    // any client able to set a GUC could otherwise impersonate anyone.
+    await db.sql.query('select set_config($1, $2, false)', ['request.jwt.claims', '']);
+    await db.sql.query('select set_config($1, $2, false)', [
+      'app.user_id',
+      SEED.acmeApprover,
+    ]);
+    await db.sql.query('set role authenticated');
+    const rows = await db.sql.query('select id from projects');
+    await db.asSuperuser();
+    await db.sql.query('select set_config($1, $2, false)', ['app.user_id', '']);
+
+    expect(rows).toEqual([]);
+  });
+
+  it('resolves the acting user through the JWT subject', async () => {
+    const rows = await db.withUser(AUTH.acmeApprover, (sql) =>
+      sql.query<{ id: string | null }>('select app.current_user_id() as id'),
+    );
+
+    expect(rows[0]?.id).toBe(SEED.acmeApprover);
+  });
+
   it('stops showing a project once membership is removed', async () => {
     await db.sql.query(`update memberships set removed_at = $1 where id = 'm-4'`, [
       new Date(T0),
     ]);
 
-    const rows = await db.withUser(SEED.acmeReviewer, (sql) =>
+    const rows = await db.withUser(AUTH.acmeReviewer, (sql) =>
       sql.query('select id from projects'),
     );
 
@@ -144,7 +178,7 @@ describe('row level security', () => {
     // The insert policy requires actor_id to match the caller, so history
     // cannot be fabricated under another user's identity.
     await expect(
-      db.withUser(SEED.acmeApprover, (sql) =>
+      db.withUser(AUTH.acmeApprover, (sql) =>
         sql.query(
           `insert into timeline_events
              (id, project_id, seq, type, actor_id, occurred_at, payload)
@@ -162,7 +196,7 @@ describe('row level security', () => {
 
   it('refuses an event written into another tenant’s project', async () => {
     await expect(
-      db.withUser(SEED.globexApprover, (sql) =>
+      db.withUser(AUTH.globexApprover, (sql) =>
         sql.query(
           `insert into timeline_events
              (id, project_id, seq, type, actor_id, occurred_at, payload)
@@ -179,7 +213,7 @@ describe('row level security', () => {
   });
 
   it('hides users who share no project with the caller', async () => {
-    const rows = await db.withUser(SEED.acmeApprover, (sql) =>
+    const rows = await db.withUser(AUTH.acmeApprover, (sql) =>
       sql.query<{ id: string }>('select id from users order by id'),
     );
     const visible = rows.map((row) => row.id);
@@ -190,7 +224,7 @@ describe('row level security', () => {
   });
 
   it('hides organizations the caller has no relationship with', async () => {
-    const rows = await db.withUser(SEED.acmeApprover, (sql) =>
+    const rows = await db.withUser(AUTH.acmeApprover, (sql) =>
       sql.query<{ id: string }>('select id from organizations order by id'),
     );
     const visible = rows.map((row) => row.id);

@@ -67,11 +67,17 @@ src/core/        Pure domain. No React, no Next.js, no SDKs — enforced by ESLi
   testing/       In-memory ports and fixture builders
 src/infra/       Adapters. Postgres executors, repositories, row mappers.
   testing/       Ephemeral PGlite database and shared fixtures
-src/config/      Environment validation
+  auth/          Supabase Auth clients and session resolution
+src/config/      Environment validation (server) and public config (browser)
 src/app/         Next.js App Router
+src/proxy.ts     Session refresh on every request
 supabase/
   migrations/    Schema, constraints, triggers, RLS policies
 ```
+
+Migrations are the single source of schema truth. They run against ephemeral PGlite in tests
+and against the live project via `apply_migration` — never by hand, so any checkout can
+reproduce the database exactly.
 
 The domain depends only on the interfaces in `src/core/ports`. Storage, realtime, media and AI are
 adapters that satisfy those interfaces, which keeps vendors swappable and the domain testable in
@@ -88,12 +94,45 @@ One detail matters when writing these tests: superusers bypass row level securit
 asserting a policy while connected as one proves nothing. The harness switches to the
 `authenticated` role before any access claim and seeds data only as the superuser.
 
+## Identity and the request path
+
+Authentication is Supabase Auth. Application data is not read through it — the
+repositories use direct SQL, and the Supabase client is confined to signing in, signing out,
+and establishing who the caller is, so there is never a second competing data path.
+
+A request becomes a database identity in exactly one place, `asAuthenticatedUser`:
+
+```sql
+begin;
+  set local role authenticated;                    -- never the owner: postgres has BYPASSRLS
+  set local request.jwt.claims = '{"sub":"…"}';    -- what migration 0003 resolves the user from
+  -- repository queries run here, under RLS
+commit;
+```
+
+`SET LOCAL` inside a transaction is load-bearing. A plain `SET` persists on the pooled
+connection after the request ends, so the next request — a different user, possibly a
+different tenant — would inherit this identity. No policy can catch that, which makes it the
+most dangerous mistake available in this layer.
+
+The subject always comes from `supabase.auth.getUser()`, never `getSession()`. `getSession()`
+returns whatever the cookie claims without validating it, and that value is fed straight into
+`request.jwt.claims`.
+
 ## Development
 
 ```bash
 pnpm install
-pnpm dev            # http://localhost:3000
+cp .env.example .env.local   # then fill in DATABASE_URL
+pnpm dev                     # http://localhost:3000
 ```
+
+`DATABASE_URL` is a secret and is gitignored. It must connect as a role **without**
+`BYPASSRLS` — `postgres` and `service_role` both have it, and either would silently disable
+every tenancy policy while appearing to work. A live test asserts this.
+
+Tests needing the live database skip themselves when `DATABASE_URL` is absent, so a fresh
+checkout and CI both pass without credentials.
 
 | Command              | Purpose                                      |
 | -------------------- | -------------------------------------------- |
@@ -107,18 +146,19 @@ pnpm dev            # http://localhost:3000
 
 ## Roadmap
 
-| Stage | Scope                                               |
-| ----- | --------------------------------------------------- |
-| 1     | Foundation and domain core ✅                       |
-| 2     | Persistence and multi-tenant security ✅            |
-| 3     | Authentication, organization and project onboarding |
-| 4     | Timeline and activity feed                          |
-| 5     | Feature review and decision workflow                |
-| 6     | Chat and presence                                   |
-| 7     | Live sessions and screen share                      |
-| 8     | Recordings and artifacts                            |
-| 9     | AI summaries and decision digests                   |
-| 10    | Temporary remote control via session-scoped grants  |
+| Stage | Scope                                              |
+| ----- | -------------------------------------------------- |
+| 1     | Foundation and domain core ✅                      |
+| 2     | Persistence and multi-tenant security ✅           |
+| 3a    | Authentication and live database ✅                |
+| 3b    | Organization and project onboarding                |
+| 4     | Timeline and activity feed                         |
+| 5     | Feature review and decision workflow               |
+| 6     | Chat and presence                                  |
+| 7     | Live sessions and screen share                     |
+| 8     | Recordings and artifacts                           |
+| 9     | AI summaries and decision digests                  |
+| 10    | Temporary remote control via session-scoped grants |
 
 Screen sharing lands at Stage 7 by design: by then the timeline, decision model and grant system it
 needs to plug into already exist.

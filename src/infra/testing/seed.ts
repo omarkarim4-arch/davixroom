@@ -27,6 +27,24 @@ export const SEED = {
   globexProject: 'project-globex',
 } as const;
 
+/**
+ * Authentication subjects, one per seeded user.
+ *
+ * Tests act as one of these — the value goes into `request.jwt.claims.sub`,
+ * and `app.current_user_id()` resolves it back to the domain user id. Fixed
+ * uuids keep failures readable.
+ */
+export const AUTH = {
+  developer: '00000000-0000-0000-0000-000000000001',
+  vendorOwner: '00000000-0000-0000-0000-000000000002',
+  acmeApprover: '00000000-0000-0000-0000-000000000003',
+  acmeReviewer: '00000000-0000-0000-0000-000000000004',
+  globexApprover: '00000000-0000-0000-0000-000000000005',
+  strangerUser: '00000000-0000-0000-0000-000000000006',
+  /** A valid subject with no matching domain user. */
+  unlinked: '00000000-0000-0000-0000-0000000000ff',
+} as const;
+
 export const seedFixture = async (sql: SqlExecutor): Promise<void> => {
   const at = new Date(T0);
 
@@ -38,14 +56,35 @@ export const seedFixture = async (sql: SqlExecutor): Promise<void> => {
     [SEED.vendorOrg, SEED.acmeOrg, SEED.globexOrg],
   );
 
+  // Authentication subjects must exist before users can reference them.
   await sql.query(
-    `insert into users (id, organization_id, display_name, email) values
-       ($1, $7, 'Dev One', 'dev@davix.test'),
-       ($2, $7, 'Owner', 'owner@davix.test'),
-       ($3, $8, 'Acme Approver', 'approver@acme.test'),
-       ($4, $8, 'Acme Reviewer', 'reviewer@acme.test'),
-       ($5, $9, 'Globex Approver', 'approver@globex.test'),
-       ($6, $9, 'Globex Stranger', 'stranger@globex.test')`,
+    `insert into auth.users (id, email) values
+       ($1, 'dev@davix.test'),
+       ($2, 'owner@davix.test'),
+       ($3, 'approver@acme.test'),
+       ($4, 'reviewer@acme.test'),
+       ($5, 'approver@globex.test'),
+       ($6, 'stranger@globex.test'),
+       ($7, 'unlinked@davix.test')`,
+    [
+      AUTH.developer,
+      AUTH.vendorOwner,
+      AUTH.acmeApprover,
+      AUTH.acmeReviewer,
+      AUTH.globexApprover,
+      AUTH.strangerUser,
+      AUTH.unlinked,
+    ],
+  );
+
+  await sql.query(
+    `insert into users (id, organization_id, display_name, email, auth_user_id) values
+       ($1,  $7, 'Dev One',         'dev@davix.test',       $10),
+       ($2,  $7, 'Owner',           'owner@davix.test',     $11),
+       ($3,  $8, 'Acme Approver',   'approver@acme.test',   $12),
+       ($4,  $8, 'Acme Reviewer',   'reviewer@acme.test',   $13),
+       ($5,  $9, 'Globex Approver', 'approver@globex.test', $14),
+       ($6,  $9, 'Globex Stranger', 'stranger@globex.test', $15)`,
     [
       SEED.developer,
       SEED.vendorOwner,
@@ -56,6 +95,12 @@ export const seedFixture = async (sql: SqlExecutor): Promise<void> => {
       SEED.vendorOrg,
       SEED.acmeOrg,
       SEED.globexOrg,
+      AUTH.developer,
+      AUTH.vendorOwner,
+      AUTH.acmeApprover,
+      AUTH.acmeReviewer,
+      AUTH.globexApprover,
+      AUTH.strangerUser,
     ],
   );
 

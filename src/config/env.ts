@@ -1,15 +1,15 @@
 import { z } from 'zod';
 
 /**
- * Environment validation.
+ * Server-side environment validation.
  *
  * Parsed once at boot so a missing or malformed variable fails immediately with
  * a readable message, rather than surfacing as an undefined value deep inside a
  * request weeks later.
  *
- * Stage 1 has no infrastructure yet, so every integration variable is optional.
- * As adapters land in later stages their variables become required here — this
- * schema is the checklist of what the running system actually needs.
+ * Variables become required as the stage that needs them lands, so this schema
+ * doubles as the checklist of what the running system actually depends on.
+ * Never import this module from client components — see `public-env.ts`.
  */
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -17,10 +17,18 @@ const envSchema = z.object({
   /** Public origin, used for absolute links in invitations and notifications. */
   APP_URL: z.string().url().default('http://localhost:3000'),
 
-  // Stage 2 — persistence
-  SUPABASE_URL: z.string().url().optional(),
-  SUPABASE_ANON_KEY: z.string().min(1).optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  // Stage 3 — Supabase project. The URL and publishable key are public by
+  // design and safe to ship to the browser.
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url(),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
+
+  /**
+   * Direct Postgres connection, used by the repositories.
+   *
+   * A secret. It must connect as a role without BYPASSRLS, because the whole
+   * tenancy boundary rests on row level security applying to this connection.
+   */
+  DATABASE_URL: z.string().min(1),
 
   // Stage 7 — live sessions
   LIVEKIT_URL: z.string().optional(),
@@ -43,6 +51,8 @@ export const parseEnv = (source: EnvSource): Env => {
   const result = envSchema.safeParse(source);
 
   if (!result.success) {
+    // Names only. Values are never included — DATABASE_URL is a secret, and an
+    // error message is the easiest way for one to reach a log aggregator.
     const detail = result.error.issues
       .map((issue) => `  ${issue.path.join('.')}: ${issue.message}`)
       .join('\n');

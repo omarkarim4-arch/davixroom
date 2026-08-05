@@ -30,8 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files. Everything is ignored by default so a secret can never be
+# committed by accident; the template is the one deliberate exception and
+# contains no secret values.
 .env*
+!.env.example
 
 # vercel
 .vercel
