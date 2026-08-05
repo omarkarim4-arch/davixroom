@@ -135,11 +135,15 @@ export const parseEventPayload = <K extends EventType>(
  * Freezes an event so accidental mutation fails loudly in development rather
  * than silently corrupting the record.
  */
-export const sealEvent = <K extends EventType>(
-  event: TimelineEvent<K>,
-): TimelineEvent<K> => {
+/**
+ * Generic over the event object rather than over its type parameter, so a
+ * concrete `TimelineEvent<K>` and a union `AnyTimelineEvent` both come back
+ * unchanged instead of collapsing to a single member of the union.
+ */
+export const sealEvent = <E extends { readonly payload: unknown }>(event: E): E => {
   Object.freeze(event.payload);
-  return Object.freeze(event);
+  Object.freeze(event);
+  return event;
 };
 
 /** Referenced entity ids, kept as a type-level reminder of what events point at. */

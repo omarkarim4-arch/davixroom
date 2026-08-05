@@ -10,7 +10,7 @@ is deliberately organised around the durable record of a project rather than aro
 
 ## Architecture
 
-The system is built on three decisions that are expensive to retrofit, so they are settled first.
+The system is built on four decisions that are expensive to retrofit, so they are settled first.
 
 ### 1. The timeline is the spine
 
@@ -39,6 +39,21 @@ from its versions and decisions rather than stored, so publishing a new version 
 returns it to review. A stored status field would have to be remembered-to-be-reset, and forgetting
 once would show unapproved work as approved.
 
+### 4. The tenancy boundary is enforced twice
+
+`authorize()` decides what an actor may **do**. Row level security decides what rows the database
+will hand over **at all**. If application code is ever bypassed — a bug, a leaked key, a service
+that forgets to call `authorize()` — a client still cannot read another client's project.
+
+The policies are deliberately coarse (membership of the row's project, nothing finer) and the
+capability rules stay in the domain. Encoding the capability model twice would produce two
+permission systems that drift apart, and policies too intricate to verify by reading them.
+
+Immutability is enforced the same way. The `EventStore` port omits `update` and `delete`, but that
+is only an interface convention; database triggers make it a property of the data, so timeline
+events, decisions and published versions cannot be rewritten by any client. Grants accept exactly
+one change — setting `revoked_at` — so the revocation path cannot be used to quietly widen a grant.
+
 ### Layout
 
 ```
@@ -50,13 +65,28 @@ src/core/        Pure domain. No React, no Next.js, no SDKs — enforced by ESLi
   org/           Organizations and users
   ports/         Interfaces to the outside world, implemented by adapters
   testing/       In-memory ports and fixture builders
+src/infra/       Adapters. Postgres executors, repositories, row mappers.
+  testing/       Ephemeral PGlite database and shared fixtures
 src/config/      Environment validation
 src/app/         Next.js App Router
+supabase/
+  migrations/    Schema, constraints, triggers, RLS policies
 ```
 
 The domain depends only on the interfaces in `src/core/ports`. Storage, realtime, media and AI are
 adapters that satisfy those interfaces, which keeps vendors swappable and the domain testable in
 milliseconds without any infrastructure running.
+
+## Testing the database
+
+Integration tests run against [PGlite](https://pglite.dev) — Postgres compiled to WebAssembly,
+running in-process. The real migrations are applied to a fresh database per test file, so schema
+constraints, append-only triggers and RLS policies are exercised with genuine Postgres semantics.
+No Docker, no hosted project, and CI needs no service containers.
+
+One detail matters when writing these tests: superusers bypass row level security entirely, so
+asserting a policy while connected as one proves nothing. The harness switches to the
+`authenticated` role before any access claim and seeds data only as the superuser.
 
 ## Development
 
@@ -68,7 +98,7 @@ pnpm dev            # http://localhost:3000
 | Command              | Purpose                                      |
 | -------------------- | -------------------------------------------- |
 | `pnpm verify`        | Typecheck, lint and test — what CI runs      |
-| `pnpm test`          | Unit tests                                   |
+| `pnpm test`          | Unit and database integration tests          |
 | `pnpm test:watch`    | Tests in watch mode                          |
 | `pnpm test:coverage` | Coverage report                              |
 | `pnpm typecheck`     | Route typegen followed by `tsc --noEmit`     |
@@ -77,18 +107,18 @@ pnpm dev            # http://localhost:3000
 
 ## Roadmap
 
-| Stage | Scope                                                             |
-| ----- | ----------------------------------------------------------------- |
-| 1     | Foundation and domain core ✅                                     |
-| 2     | Persistence and multi-tenant security (Postgres, RLS, migrations) |
-| 3     | Authentication, organization and project onboarding               |
-| 4     | Timeline and activity feed                                        |
-| 5     | Feature review and decision workflow                              |
-| 6     | Chat and presence                                                 |
-| 7     | Live sessions and screen share                                    |
-| 8     | Recordings and artifacts                                          |
-| 9     | AI summaries and decision digests                                 |
-| 10    | Temporary remote control via session-scoped grants                |
+| Stage | Scope                                               |
+| ----- | --------------------------------------------------- |
+| 1     | Foundation and domain core ✅                       |
+| 2     | Persistence and multi-tenant security ✅            |
+| 3     | Authentication, organization and project onboarding |
+| 4     | Timeline and activity feed                          |
+| 5     | Feature review and decision workflow                |
+| 6     | Chat and presence                                   |
+| 7     | Live sessions and screen share                      |
+| 8     | Recordings and artifacts                            |
+| 9     | AI summaries and decision digests                   |
+| 10    | Temporary remote control via session-scoped grants  |
 
 Screen sharing lands at Stage 7 by design: by then the timeline, decision model and grant system it
 needs to plug into already exist.
