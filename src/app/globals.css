@@ -1,26 +1,396 @@
 @import 'tailwindcss';
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * DavixRoom design tokens.
+ *
+ * Sampled from the official logo. The identity is emissive: light blue artwork
+ * glowing out of true black. That is why `void` is exactly #000000 rather than
+ * a soft near-black — the logo artwork ships on a black ground, and any other
+ * page colour would show its edges as a visible rectangle.
+ *
+ * The two gradients mirror the logo's own light logic: the mark runs bright on
+ * the left to deep on the right, the wordmark runs light at the top to deep at
+ * the bottom. UI accents inherit those rather than a flat blue.
+ */
+@theme {
+  --color-void: #000000;
+  --color-surface: #08090c;
+  --color-raised: #0e1016;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-brand: #0a84ff;
+  --color-brand-bright: #3ba9ff;
+  --color-brand-deep: #0057d9;
+  --color-glint: #9fdfff;
+
+  --color-ink: #edeff2;
+  --color-muted: #8a93a0;
+  --color-faint: #4a515c;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  color-scheme: dark;
+
+  --gradient-mark: linear-gradient(
+    100deg,
+    var(--color-brand-bright) 0%,
+    var(--color-brand) 45%,
+    var(--color-brand-deep) 100%
+  );
+  --gradient-wordmark: linear-gradient(
+    180deg,
+    #7cc4ff 0%,
+    var(--color-brand) 55%,
+    var(--color-brand-deep) 100%
+  );
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-void);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-brand) 40%, transparent);
+  color: #ffffff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-glint);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- utilities */
+
+/* The logo's tagline signature: wide-tracked uppercase. Used for eyebrows so
+   the brand's typographic voice carries into the UI without a novelty face. */
+@utility eyebrow {
+  font-size: 0.6875rem;
+  letter-spacing: 0.36em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+@utility text-gradient-brand {
+  background-image: var(--gradient-wordmark);
+  background-clip: text;
+  color: transparent;
+}
+
+/* The thin luminous rule that flanks the tagline in the logo. */
+@utility rule-glow {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-brand) 55%, transparent) 30%,
+    var(--color-glint) 50%,
+    color-mix(in srgb, var(--color-brand) 55%, transparent) 70%,
+    transparent
+  );
+}
+
+@utility hairline {
+  border-color: color-mix(in srgb, #ffffff 8%, transparent);
+}
+
+/*
+ * Fades the outer margin of a logo image to transparent.
+ *
+ * The artwork sits in a faint blue-black ambient field rather than on pure
+ * black, so a hard-edged image on a #000 page reads as a slightly lighter
+ * panel. This dissolves that edge into the glow it was always meant to be.
+ *
+ * It is done in CSS rather than baked into the files on purpose: encoding the
+ * falloff into the PNGs produced an alpha image that decoded correctly but
+ * stalled Chrome's rasteriser, and the artwork itself must stay untouched.
+ *
+ * Every image using this must keep its artwork inside 6%–94% horizontally and
+ * 11%–89% vertically, which is what the `-padded` crops guarantee.
+ */
+@utility feather-edges {
+  --feather-mask:
+    linear-gradient(to right, transparent 0%, #000 6%, #000 94%, transparent 100%),
+    linear-gradient(to bottom, transparent 0%, #000 11%, #000 89%, transparent 100%);
+  -webkit-mask-image: var(--feather-mask);
+  -webkit-mask-composite: source-in;
+  mask-image: var(--feather-mask);
+  mask-composite: intersect;
+}
+
+/* ------------------------------------------------------------ intro sequence
+
+   Beat timings are absolute animation-delays from a single shared t=0, so the
+   whole sequence stays in step without JavaScript driving frames. Every element
+   uses `animation-fill-mode: both`, which holds each beat's start state before
+   its delay elapses — that is what keeps the screen genuinely black at t=0.
+
+   Beat 1  0.00s  black
+   Beat 2  0.35s  CRT strike and vertical bloom
+   Beat 3  1.15s  mark resolves out of overexposure
+   Beat 4  1.90s  cursor travels in and clicks the D
+   Beat 5  3.05s  wordmark wipes in
+   Beat 6  3.75s  crossfade to the official lockup, overlay retires
+*/
+
+.dvx-intro {
+  animation: dvx-intro-retire 0.5s ease-in 4.35s both;
+}
+
+@keyframes dvx-intro-retire {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* Beat 2 — the horizontal strike, then the vertical bloom of a CRT waking up. */
+.dvx-strike {
+  animation: dvx-strike 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
+}
+
+@keyframes dvx-strike {
+  0% {
+    opacity: 0;
+    transform: scaleX(0) scaleY(0.004);
+  }
+  22% {
+    opacity: 1;
+    transform: scaleX(1) scaleY(0.004);
+  }
+  70% {
+    opacity: 0.85;
+    transform: scaleX(1) scaleY(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1) scaleY(1);
+  }
+}
+
+.dvx-scanlines {
+  animation:
+    dvx-fade-in 0.6s ease-out 0.95s both,
+    dvx-scan 7s linear 0.95s infinite,
+    dvx-fade-out 0.6s ease-in 3.75s forwards;
+}
+
+@keyframes dvx-scan {
+  to {
+    background-position-y: 100vh;
+  }
+}
+
+/* Beat 3 — the mark arrives blown out and cools into brand colour. */
+.dvx-mark {
+  animation:
+    dvx-mark-resolve 0.9s cubic-bezier(0.22, 1, 0.36, 1) 1.15s both,
+    dvx-mark-pulse 0.45s ease-out 2.7s;
+}
+
+@keyframes dvx-mark-resolve {
+  0% {
+    opacity: 0;
+    filter: brightness(2.8) blur(14px);
+    transform: scale(1.045);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1) blur(0);
+    transform: scale(1);
+  }
+}
+
+@keyframes dvx-mark-pulse {
+  50% {
+    filter: brightness(1.55);
+  }
+}
+
+/* Beat 4 — the cursor flies to the exact point where the logo's own cursor
+   lives, so the click and the artwork resolve to the same place. */
+.dvx-cursor {
+  animation:
+    dvx-cursor-travel 0.85s cubic-bezier(0.33, 1, 0.68, 1) 1.9s both,
+    dvx-cursor-press 0.3s ease-out 2.7s,
+    dvx-fade-out 0.4s ease-in 3.15s forwards;
+}
+
+@keyframes dvx-cursor-travel {
+  0% {
+    opacity: 0;
+    transform: translate(22vw, 26vh) scale(1.3);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+@keyframes dvx-cursor-press {
+  50% {
+    transform: translate(0, 0) scale(0.86);
+  }
+}
+
+.dvx-ripple {
+  animation: dvx-ripple 0.85s cubic-bezier(0.16, 1, 0.3, 1) 2.7s both;
+}
+
+.dvx-ripple-late {
+  animation: dvx-ripple 0.85s cubic-bezier(0.16, 1, 0.3, 1) 2.84s both;
+}
+
+@keyframes dvx-ripple {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* Beat 5 — the wordmark wipes in left to right under the mark. */
+.dvx-wordmark {
+  animation: dvx-wordmark-wipe 0.75s cubic-bezier(0.22, 1, 0.36, 1) 3.05s both;
+}
+
+@keyframes dvx-wordmark-wipe {
+  0% {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+    filter: brightness(1.9);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    filter: brightness(1);
+  }
+}
+
+/* Beat 6 — the assembled parts hand off to the untouched official lockup. */
+.dvx-parts-out {
+  animation: dvx-fade-out 0.55s ease-in 3.75s both;
+}
+
+.dvx-lockup-in {
+  animation: dvx-lockup-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) 3.75s both;
+}
+
+@keyframes dvx-lockup-in {
+  0% {
+    opacity: 0;
+    filter: brightness(1.6);
+    transform: scale(1.012);
+  }
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+    transform: scale(1);
+  }
+}
+
+.dvx-shimmer {
+  animation: dvx-shimmer 0.9s ease-out 3.7s both;
+}
+
+@keyframes dvx-shimmer {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.2);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1.6);
+  }
+}
+
+.dvx-skip {
+  animation: dvx-fade-in 0.5s ease-out 1.2s both;
+}
+
+@keyframes dvx-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dvx-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The inline head script stamps data-intro before first paint, so a returning
+   visitor never sees a frame of the overlay. */
+[data-intro='skip'] .dvx-intro {
+  display: none;
+}
+
+/* Without JavaScript the stamp never lands; the overlay still retires on its
+   own animation, but hide it outright rather than blocking content for 4s. */
+@media (scripting: none) {
+  .dvx-intro {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dvx-intro {
+    display: none;
+  }
+
+  .dvx-rise {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------------ page use */
+
+/* Sections lift in as they are reached. Distance is small on purpose: this is
+   a product page, not a parallax showcase. */
+/*
+ * The range is expressed in `cover` rather than `entry` on purpose. `entry`
+ * ends when an element is fully in view, which never happens for a section
+ * taller than the viewport — the timeline then pins at 0% and the section
+ * stays at `opacity: 0`, invisible. `cover` is well defined at any height.
+ *
+ * Browsers without scroll-driven animations ignore `animation-timeline` and
+ * run this as an ordinary 0.7s animation, which still ends at opacity 1.
+ */
+.dvx-rise {
+  animation: dvx-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-timeline: view();
+  animation-range: cover 0% cover 20%;
+}
+
+@keyframes dvx-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
