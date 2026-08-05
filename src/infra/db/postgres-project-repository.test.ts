@@ -18,6 +18,7 @@ const sessionId = asId<'SessionId'>('session-1');
 const approverUser: User = {
   id: acmeApprover,
   organizationId: asId<'OrganizationId'>(SEED.acmeOrg),
+  organizationRole: 'org_owner',
   displayName: 'Acme Approver',
   email: 'approver@acme.test',
 };

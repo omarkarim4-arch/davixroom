@@ -15,6 +15,7 @@ export type OrganizationId = Brand<string, 'OrganizationId'>;
 export type UserId = Brand<string, 'UserId'>;
 export type ProjectId = Brand<string, 'ProjectId'>;
 export type MembershipId = Brand<string, 'MembershipId'>;
+export type InvitationId = Brand<string, 'InvitationId'>;
 export type GrantId = Brand<string, 'GrantId'>;
 export type EventId = Brand<string, 'EventId'>;
 export type DeliverableId = Brand<string, 'DeliverableId'>;

@@ -6,6 +6,7 @@
  */
 
 import type { Capability } from './auth/capabilities';
+import type { OrganizationCapability } from './auth/organization-capabilities';
 
 export type AuthorizationDenial =
   | { readonly kind: 'not_a_member'; readonly capability: Capability }
@@ -15,13 +16,37 @@ export type AuthorizationDenial =
   | { readonly kind: 'grant_revoked'; readonly capability: Capability }
   | { readonly kind: 'scope_mismatch'; readonly capability: Capability };
 
+/**
+ * Denials from the organization level, above any project.
+ *
+ * Kept separate from `AuthorizationDenial` because the capability vocabularies
+ * differ; a call site handling one should not silently compile against the
+ * other.
+ */
+export type OrganizationDenial =
+  | {
+      readonly kind: 'not_in_organization';
+      readonly capability: OrganizationCapability;
+    }
+  | {
+      readonly kind: 'client_organization';
+      readonly capability: OrganizationCapability;
+    }
+  | {
+      readonly kind: 'organization_capability_not_granted';
+      readonly capability: OrganizationCapability;
+    };
+
 export type InvariantViolation = {
   readonly kind: 'invariant_violation';
   readonly rule: string;
   readonly detail: string;
 };
 
-export type DomainError = AuthorizationDenial | InvariantViolation;
+export type DomainError =
+  | AuthorizationDenial
+  | OrganizationDenial
+  | InvariantViolation;
 
 export const invariantViolation = (
   rule: string,
@@ -45,5 +70,11 @@ export const describeError = (error: DomainError): string => {
       return `Grant for ${error.capability} was revoked`;
     case 'scope_mismatch':
       return `Grant for ${error.capability} does not cover the requested scope`;
+    case 'not_in_organization':
+      return `Actor belongs to a different organization (needed ${error.capability})`;
+    case 'client_organization':
+      return `Client organizations cannot ${error.capability}; they join through invitations`;
+    case 'organization_capability_not_granted':
+      return `Organization capability ${error.capability} is not granted`;
   }
 };

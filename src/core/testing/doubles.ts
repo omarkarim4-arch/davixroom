@@ -14,6 +14,7 @@ import type { Membership } from '../project/membership';
 import type { Project } from '../project/project';
 import type { Organization } from '../org/organization';
 import type { User } from '../org/user';
+import { DEFAULT_INVITATION_TTL_MS, type Invitation } from '../org/invitation';
 import type { Role } from '../auth/capabilities';
 import { asId, type ProjectId, type UserId } from '../ids';
 import type { Timestamp } from '../time';
@@ -116,8 +117,23 @@ export const anOrganization = (
 export const aUser = (overrides: Partial<User> = {}): User => ({
   id: asId<'UserId'>('user-1'),
   organizationId: asId<'OrganizationId'>('org-vendor'),
+  organizationRole: 'org_member',
   displayName: 'Dev One',
   email: 'dev@vendor.test',
+  ...overrides,
+});
+
+export const anInvitation = (overrides: Partial<Invitation> = {}): Invitation => ({
+  id: asId<'InvitationId'>('invitation-1'),
+  organizationId: asId<'OrganizationId'>('org-client'),
+  projectId: asId<'ProjectId'>('project-1'),
+  role: 'client_approver',
+  email: 'approver@client.test',
+  invitedBy: asId<'UserId'>('user-1'),
+  createdAt: T0,
+  expiresAt: T0 + DEFAULT_INVITATION_TTL_MS,
+  acceptedAt: null,
+  revokedAt: null,
   ...overrides,
 });
 

@@ -79,6 +79,13 @@ export default function SignInPage() {
 
         <div aria-hidden className="rule-glow mt-10 opacity-50" />
 
+        <p className="text-muted mt-6 text-center text-sm">
+          Building software for clients?{' '}
+          <Link href="/sign-up" className="text-brand hover:brightness-125">
+            Create a workspace
+          </Link>
+        </p>
+
         <p className="eyebrow mt-6 text-center">Live Development Workspace</p>
       </div>
     </main>

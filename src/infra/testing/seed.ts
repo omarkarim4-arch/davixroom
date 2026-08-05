@@ -56,16 +56,17 @@ export const seedFixture = async (sql: SqlExecutor): Promise<void> => {
     [SEED.vendorOrg, SEED.acmeOrg, SEED.globexOrg],
   );
 
-  // Authentication subjects must exist before users can reference them.
+  // Authentication subjects must exist before users can reference them. All are
+  // confirmed; tests that care about the unconfirmed case make their own.
   await sql.query(
-    `insert into auth.users (id, email) values
-       ($1, 'dev@davix.test'),
-       ($2, 'owner@davix.test'),
-       ($3, 'approver@acme.test'),
-       ($4, 'reviewer@acme.test'),
-       ($5, 'approver@globex.test'),
-       ($6, 'stranger@globex.test'),
-       ($7, 'unlinked@davix.test')`,
+    `insert into auth.users (id, email, email_confirmed_at) values
+       ($1, 'dev@davix.test',       $8),
+       ($2, 'owner@davix.test',     $8),
+       ($3, 'approver@acme.test',   $8),
+       ($4, 'reviewer@acme.test',   $8),
+       ($5, 'approver@globex.test', $8),
+       ($6, 'stranger@globex.test', $8),
+       ($7, 'unlinked@davix.test',  $8)`,
     [
       AUTH.developer,
       AUTH.vendorOwner,
@@ -74,17 +75,21 @@ export const seedFixture = async (sql: SqlExecutor): Promise<void> => {
       AUTH.globexApprover,
       AUTH.strangerUser,
       AUTH.unlinked,
+      at,
     ],
   );
 
+  // Organization standing, distinct from the project roles below: the vendor
+  // owner runs the team, everyone else is an ordinary member of theirs.
   await sql.query(
-    `insert into users (id, organization_id, display_name, email, auth_user_id) values
-       ($1,  $7, 'Dev One',         'dev@davix.test',       $10),
-       ($2,  $7, 'Owner',           'owner@davix.test',     $11),
-       ($3,  $8, 'Acme Approver',   'approver@acme.test',   $12),
-       ($4,  $8, 'Acme Reviewer',   'reviewer@acme.test',   $13),
-       ($5,  $9, 'Globex Approver', 'approver@globex.test', $14),
-       ($6,  $9, 'Globex Stranger', 'stranger@globex.test', $15)`,
+    `insert into users
+       (id, organization_id, organization_role, display_name, email, auth_user_id) values
+       ($1,  $7, 'org_member', 'Dev One',         'dev@davix.test',       $10),
+       ($2,  $7, 'org_owner',  'Owner',           'owner@davix.test',     $11),
+       ($3,  $8, 'org_owner',  'Acme Approver',   'approver@acme.test',   $12),
+       ($4,  $8, 'org_member', 'Acme Reviewer',   'reviewer@acme.test',   $13),
+       ($5,  $9, 'org_owner',  'Globex Approver', 'approver@globex.test', $14),
+       ($6,  $9, 'org_member', 'Globex Stranger', 'stranger@globex.test', $15)`,
     [
       SEED.developer,
       SEED.vendorOwner,

@@ -54,6 +54,32 @@ is only an interface convention; database triggers make it a property of the dat
 events, decisions and published versions cannot be rewritten by any client. Grants accept exactly
 one change — setting `revoked_at` — so the revocation path cannot be used to quietly widen a grant.
 
+### 5. Onboarding writes go through functions, not policies
+
+Row level security answers "which rows may this caller see". It cannot answer
+"may this caller create the first row", because onboarding necessarily runs for
+somebody who is a member of nothing — and a `memberships` INSERT policy loose
+enough to admit a project's creator is also loose enough to let anyone insert a
+membership for themselves into any project id they guess.
+
+So no application role holds INSERT on `organizations`, `users`, `projects`,
+`memberships` or `invitations`. Those tables are written only by four
+`SECURITY DEFINER` functions in migration 0005, each of which resolves the
+caller from the verified JWT before doing anything. They enforce structure —
+"this account has no user row yet", "your organization is this project's vendor
+side", "this invitation is unexpired and addressed to this confirmed address" —
+and never evaluate a capability. `authorize()` still owns that, and runs first.
+
+The hierarchy those functions build is
+`Organization → Team Members → Projects → Client Invitations → Review Sessions`.
+Vendors register themselves; a client organization exists only because a vendor
+named it while creating a project, and client users exist only because they
+accepted an invitation. There is no route by which a client registers.
+
+An invitation's token is never stored — only its SHA-256 hash — and the token
+alone is not sufficient to accept: the caller must be signed in as the confirmed
+address the invitation names. A forwarded link is worth nothing on its own.
+
 ### Layout
 
 ```
@@ -151,7 +177,7 @@ checkout and CI both pass without credentials.
 | 1     | Foundation and domain core ✅                      |
 | 2     | Persistence and multi-tenant security ✅           |
 | 3a    | Authentication and live database ✅                |
-| 3b    | Organization and project onboarding                |
+| 3b    | Organization and project onboarding ✅             |
 | 4     | Timeline and activity feed                         |
 | 5     | Feature review and decision workflow               |
 | 6     | Chat and presence                                  |

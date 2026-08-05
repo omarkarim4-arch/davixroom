@@ -56,12 +56,14 @@ export const createTestDatabase = async (): Promise<TestDatabase> => {
   `);
 
   // A stand-in for the auth schema Supabase manages. Migration 0003 references
-  // auth.users, so the table must exist; only the id is needed here.
+  // auth.users, and migration 0005 reads the address and its confirmation
+  // before letting anybody accept an invitation, so both columns must exist.
   await db.exec(`
     create schema if not exists auth;
     create table auth.users (
       id uuid primary key,
-      email text
+      email text,
+      email_confirmed_at timestamptz
     );
   `);
 
